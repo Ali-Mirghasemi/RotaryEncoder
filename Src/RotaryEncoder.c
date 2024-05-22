@@ -74,7 +74,6 @@ void RotaryEncoder_handle(void) {
                 pEncoder->onChange(pEncoder, direction);
             }
             pEncoder->LastDirection = direction;
-        }
     #if ROTARY_ENCODER_ENABLE_FLAG
         }
     #endif // RotaryEncoder_ENABLE_FLAG
@@ -136,12 +135,14 @@ uint8_t RotaryEncoder_add(RotaryEncoder* encoder, const RotaryEncoder_Pins* conf
     // add new encoder to list
     RotaryEncoder_setConfig(encoder, config);
     // init IOs
-    encoderDriver->initPin(config);
-    encoder->State = (encoderDriver->readPin(encoder->Config) << 1 | encoderDriver->readPin(encoder->Config)) & 3;
+    __initPin(&config->Clock);
+    __initPin(&config->Data);
+    __initIrq(&config->Clock);
+    //encoder->State = (encoderDriver->readPin(encoder->Config) << 1 | encoderDriver->readPin(encoder->Config)) & 3;
 #if ROTARY_ENCODER_MAX_NUM == -1
     // add encoder to linked list
     encoder->Previous = lastEncoder;
-    lastEncoder = RotaryEncoder;
+    lastEncoder = ROTARY_ENCODER_NULL;
 #endif // ROTARY_ENCODER_MAX_NUM == -1
     encoder->Configured = 1;
     encoder->Enabled = 1;
@@ -159,11 +160,8 @@ uint8_t RotaryEncoder_remove(RotaryEncoder* remove) {
     // check last encoder first
     if (remove == pEncoder) {
         // deinit IO
-    #if ROTARY_ENCODER_USE_DEINIT
-        if (encoderDriver->deinitPin) {
-            encoderDriver->deinitPin(remove->Config);
-        }
-    #endif
+        __deInitPin(remove->Config->Clock);
+        __deInitPin(remove->Config->Data);
         // remove encoder dropped from link list
         pEncoder->Previous = remove->Previous;
         remove->Previous = ROTARY_ENCODER_NULL;
@@ -174,11 +172,8 @@ uint8_t RotaryEncoder_remove(RotaryEncoder* remove) {
     while (ROTARY_ENCODER_NULL != pEncoder) {
         if (remove == pEncoder->Previous) {
             // deinit IO
-		#if ROTARY_ENCODER_USE_DEINIT
-            if (encoderDriver->deinitPin) {
-                encoderDriver->deinitPin(remove->Config);
-            }
-        #endif
+            __deInitPin(remove->Config->Clock);
+            __deInitPin(remove->Config->Data);
             // remove encoder dropped from link list
             pEncoder->Previous = remove->Previous;
             remove->Previous = ROTARY_ENCODER_NULL;
@@ -193,6 +188,8 @@ uint8_t RotaryEncoder_remove(RotaryEncoder* remove) {
     RotaryEncoder* pEncoder = encoders;
     while (len--) {
         if (remove == pEncoder && pEncoder->Configured) {
+            __deInitPin(remove->Config->Clock);
+            __deInitPin(remove->Config->Data);
             pEncoder->Configured = 0;
             pEncoder->Enabled = 0;
             return 1;
@@ -244,8 +241,8 @@ uint8_t RotaryEncoder_isEnabled(RotaryEncoder* encoder) {
 #endif
 
 #if ROTARY_ENCODER_ARGS
-void RotaryEncoder_setArgs(RotaryEncoder*, void* args) {
-    RotaryEncoder->Args = args;
+void RotaryEncoder_setArgs(RotaryEncoder* encoder, void* args) {
+    encoder->Args = args;
 }
 void* RotaryEncoder_getArgs(RotaryEncoder* encoder) {
     return encoder->Args;
@@ -256,7 +253,7 @@ void* RotaryEncoder_getArgs(RotaryEncoder* encoder) {
 void RotaryEncoder_setRange(RotaryEncoder* encoder, RotaryEncoder_Index min, RotaryEncoder_Index max) {
     encoder->Range.Max = max;
     encoder->Range.Min = min;
-    RotaryEncoder_setIndex(encoder->Index);
+    RotaryEncoder_setIndex(encoder, encoder->Index);
 }
 void RotaryEncoder_setIndex(RotaryEncoder* encoder, RotaryEncoder_Index index) {
     if (encoder->Index > encoder->Range.Max) {
